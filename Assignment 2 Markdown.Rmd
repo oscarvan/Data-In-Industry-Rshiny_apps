@@ -1,0 +1,297 @@
+---
+title: "Assingment 2"
+output: html_document
+date: "2023-04-05"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(datasets)
+library(corrgram)
+library(visdat)
+library(forecast)
+library(tidytext)
+library(tidyverse)
+library(janeaustenr)
+library(stringr)
+library(wordcloud2)
+library(reshape2)
+library(pls)
+library(ggplot2)
+library(devtools)
+library(car)
+#library(tabplot)
+library(textdata)
+library(seriation)
+library(visNetwork)
+library(leaflet)
+library(shinycssloaders)
+library(DT)
+library(plotly)
+
+library(data.table)
+library(jstable)
+library(GGally)
+library(summarytools)
+library(ggstatsplot)
+library(naniar)
+library(rpart)
+library(rpart.plot)
+library(caret)
+library(glmnet)
+library(recipes)
+library(skimr) 
+library(tidymodels) 
+library(caret)
+library(glmnet)
+```
+
+## Import data
+
+Missing placeholders : "NA", -99, "\--",
+
+```{r}
+dat <- read.csv("Ass2Data.csv", header = TRUE, na.strings =
+c('NA','-99', '--'), stringsAsFactors = TRUE)
+```
+
+```{r}
+summary(dat)
+```
+
+5\. Identify any categorical missing values that are "Not Applicable" and create new levels for these values using something like:
+
+```{r}
+dat_2 = dat
+
+dat_2$POLITICS <- as.character(dat_2$POLITICS) #convert away from factor
+dat_2$POLITICS[is.na(dat_2$POLITICS)] <- "NONE"
+dat_2$POLITICS <- as.factor(dat_2$POLITICS) # convert back to factor
+
+dat_2$HEALTHCARE_BASIS <- as.character(dat_2$HEALTHCARE_BASIS) #convert away from factor
+dat_2$HEALTHCARE_BASIS[is.na(dat_2$HEALTHCARE_BASIS)] <- "NONE"
+dat_2$HEALTHCARE_BASIS <- as.factor(dat_2$HEALTHCARE_BASIS) # convert back to factor
+```
+
+6.  SHADOW VARIABLES
+
+Identify any numeric missing values that are "Not Applicable" and create new levels for these values
+
+```{r}
+# dat_2$POPULATION_shadow <- as.numeric(is.na(dat_2$POPULATION)) 
+# #dat_2$POPULATION[is.na(dat_2$POPULATION)] <- 0 
+# 
+# dat_2$AGE25_PROPTN_shadow <- as.numeric(is.na(dat_2$AGE25_PROPTN))
+# #dat_2$AGE25_PROPTN[is.na(dat_2$AGE25_PROPTN)] <- 0 
+# 
+# dat_2$AGE50_PROPTN_shadow <- as.numeric(is.na(dat_2$AGE50_PROPTN)) 
+# #dat_2$AGE50_PROPTN[is.na(dat_2$AGE50_PROPTN)] <- 0 
+# 
+# dat_2$AGE_MEDIAN_shadow <- as.numeric(is.na(dat_2$AGE_MEDIAN)) 
+# #dat_2$AGE_MEDIAN[is.na(dat_2$AGE_MEDIAN)] <- 0 
+# 
+# dat_2$POP_DENSITY_shadow <- as.numeric(is.na(dat_2$POP_DENSITY)) 
+# #dat_2$POP_DENSITY[is.na(dat_2$POP_DENSITY)] <- 0 
+# 
+# dat_2$GDP_shadow <- as.numeric(is.na(dat_2$GDP)) 
+# #dat_2$GDP[is.na(dat_2$GDP)] <- 0 
+# 
+# dat_2$INFANT_MORT_shadow <- as.numeric(is.na(dat_2$INFANT_MORT)) 
+# #dat_2$INFANT_MORT[is.na(dat_2$INFANT_MORT)] <- 0 
+# 
+# dat_2$DOCS_shadow <- as.numeric(is.na(dat_2$DOCS)) 
+# #dat_2$DOCS[is.na(dat_2$DOCS)] <- 0 
+# 
+# dat_2$VAX_RATE_shadow <- as.numeric(is.na(dat_2$VAX_RATE)) 
+# #dat_2$VAX_RATE[is.na(dat_2$VAX_RATE)] <- 0 
+# 
+# dat_2$HEALTHCARE_COST_shadow <- as.numeric(is.na(dat_2$HEALTHCARE_COST)) 
+# #dat_2$HEALTHCARE_COST[is.na(dat_2$HEALTHCARE_COST)] <- 0 
+# 
+# dat_2$DEATH_RATE_shadow <- as.numeric(is.na(dat_2$DEATH_RATE)) 
+# #dat_2$DEATH_RATE[is.na(dat_2$DEATH_RATE)] <- 0 
+```
+
+Data clean : Variables
+
+```{r}
+pMiss <- function(x){ sum(is.na(x)) / length(x) * 100 }
+
+threshold <- 50
+d <- dat_2
+cRatio <- apply(X = d, MARGIN = 2, FUN = pMiss) # run pMiss for each column of the data frame
+cat("Variables to remove:", paste(colnames(d)[cRatio > threshold], collapse = ","))
+```
+
+Missingness threshold and list rows to remove
+
+```{r}
+threshold <- 50
+
+rRatio <- apply(X = d, MARGIN = 1, FUN = pMiss)  # run pMiss for each row of the df 
+cat("Observations to remove (First 50) :", paste(head(rownames(d)[rRatio > threshold], n = 50), collapse = ", "))
+```
+
+Clean both Vars and Obs
+
+```{r}
+cat("Original dimensions: ",dim(d))
+
+var_miss_threshold = 100
+obs_miss_threshold = 100
+
+# remove variables first
+cRatio <- apply(d,2,pMiss)
+d <- d[, cRatio < var_miss_threshold]
+
+# then observations
+rRatio <- apply(d,1,pMiss)
+d <- d[rRatio < obs_miss_threshold, ]
+
+cat("Final data dimensions are: ",dim(d))
+
+```
+
+Outlier cleaning strategy
+
+**Interquartile range method:**
+
+only be interested in identifying outliers in one column of a data frame. For example, suppose we only want to remove rows that have an outlier in column 'A' of our data frame.
+
+11.Create a test - train split
+
+```{r}
+train <- d[d$OBS_TYPE == 'Train',]
+test <- d[d$OBS_TYPE == 'Test',]
+```
+
+Recipe based processing pipeline:
+
+```{r}
+recipeA <- recipes::recipe(DEATH_RATE ~., data = train) %>%
+      update_role("CODE", new_role = 'id') %>% #id is not a predictor
+      update_role('OBS_TYPE', new_role = 'split') %>% #obs_type is not a predictor
+      step_impute_knn(all_predictors(), neighbors = 5) %>%
+      step_rm('OBS_TYPE') %>%
+      step_rm("CODE") %>%
+      step_center(all_numeric(), -has_role("outcome"))%>%
+      step_scale(all_numeric(), -has_role("outcome")) %>%
+      step_dummy(all_predictors(), -all_numeric())
+
+summary(recipeA)
+
+prepped_recipeA <- prep(recipeA, training = train)
+prepped_recipeA
+
+covid_train_baked <- bake(prepped_recipeA, train) 
+covid_train_baked
+
+covid_test_baked <- bake(prepped_recipeA, test)
+covid_test_baked
+```
+
+```{r}
+fit.control <- trainControl(method = "repeatedcv", number = 5, repeats = 10)
+
+set.seed(123)
+model <- caret::train(
+              recipeA, 
+              data = train, 
+              tuneGrid = expand.grid(
+                alpha = 0:1,
+                lambda = seq(0.0001, 1, length = 20)
+              ),
+              method = 'glmnet',  
+              trControl = fit.control)
+model
+model.res = resid(model)
+model.res
+```
+
+```{r}
+get_best_result = function(caret_fit) {
+  best = which(rownames(caret_fit$results) == rownames(caret_fit$bestTune))
+  best_result = caret_fit$results[best, ]
+  rownames(best_result) = NULL
+  best_result
+}
+
+model$modelType
+get_best_result(model)
+print (max(model[["results"]][["RMSE"]]))
+```
+
+```{r}
+plot(model)
+```
+
+RMSE
+
+```{r}
+calc_rmse = function(actual, predicted) {
+  sqrt(mean((actual - predicted) ^ 2))
+}
+
+calc_rmse(actual = test$DEATH_RATE,
+          predicted = predict(model, test))
+```
+
+```{r}
+test$Prediction <- predict(model, newdata = test)
+caret::RMSE(test$Prediction, test$DEATH_RATE, na.rm = TRUE)
+```
+
+PREDICTIONS
+
+```{r}
+rang <- range(c(test$DEATH_RATE, test$Prediction))
+ggplot(data = test) +
+  geom_point(mapping = aes(x = Prediction, y = DEATH_RATE)) +
+  geom_abline(slope = 1, col = "blue") +
+  labs(title = "Death Rate predictions of covid test data", y = "predicted", x = "actual") +
+  coord_fixed(ratio = 1, xlim = rang, ylim = rang, expand = TRUE)
+```
+
+```{r}
+summary (model)
+```
+
+```{r}
+# Calculate residuals for test and train data
+test$Residuals <- residuals(model$finalModel, newdata = test)
+train$Residuals <- residuals(model$finalModel, newdata = train)
+```
+
+```{r}
+best_model = model$finalModel
+
+#different way of getting residuals - assigning to variables. 
+# Get residuals for train data
+train_resid <- resid(best_model)
+
+# Get residuals for test data
+test$Prediction <- predict(best_model, newx = test)
+test_resid <- test$DEATH_RATE - test$Prediction
+```
+
+```{r}
+# Calculate residuals for the test and train data
+test$Residuals <- test_resid
+train$Residuals <- residuals(model)
+
+# Create a data frame with residuals and data set indicator
+data <- rbind(
+  data.frame(Data = "Test", Residuals = test$Residuals),
+  data.frame(Data = "Train", Residuals = train$Residuals)
+)
+
+# Create boxplot with ggplot2
+library(ggplot2)
+p <- ggplot(data, aes(x = Data, y = Residuals)) + 
+  geom_boxplot()
+
+# Label outliers
+outliers <- boxplot(data$Residuals, plot = FALSE)$out
+p + geom_text(aes(x = Data, y = outliers, label = round(outliers, 2)), 
+              hjust = -0.2, vjust = 0.5)
+```

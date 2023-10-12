@@ -1,0 +1,106 @@
+library(shiny)
+library(shinyjs)
+library(vcd)
+library(MASS)
+library(RColorBrewer)
+library(datasets)
+library(corrgram)
+library(visdat)
+library(forecast)
+library(tidytext)
+library(tidyverse)
+library(janeaustenr)
+library(stringr)
+library(wordcloud2)
+library(reshape2)
+library(pls)
+library(ggplot2)
+library(devtools)
+library(car)
+#library(tabplot)
+library(textdata)
+library(seriation)
+library(visNetwork)
+library(leaflet)
+library(shinycssloaders)
+library(DT)
+library(plotly)
+
+library(data.table)
+library(jstable)
+library(GGally)
+library(summarytools)
+library(ggstatsplot)
+library(naniar)
+library(rpart)
+library(rpart.plot)
+
+
+# data import and processing
+data = read.csv("Ass2Data.csv", header = TRUE, na.strings =
+                  c('NA','-99', '--'), stringsAsFactors = TRUE)
+
+#change variable types (this data contains orginal variables with missingness) 
+data = data %>%  
+  mutate(CODE = as.character(CODE))
+
+########### CLEANING ###############
+
+#copy dataset
+dat_2 = data
+
+#categorical missing values that are "Not Applicable" and create new level NONE
+dat_2$POLITICS <- as.character(dat_2$POLITICS) #convert away from factor
+dat_2$POLITICS[is.na(dat_2$POLITICS)] <- "NONE"
+dat_2$POLITICS <- as.factor(dat_2$POLITICS) # convert back to factor
+dat_2$HEALTHCARE_BASIS <- as.character(dat_2$HEALTHCARE_BASIS) #convert away from factor
+dat_2$HEALTHCARE_BASIS[is.na(dat_2$HEALTHCARE_BASIS)] <- "NONE"
+dat_2$HEALTHCARE_BASIS <- as.factor(dat_2$HEALTHCARE_BASIS) # convert back to factor
+
+# numeric missing values that are “Not Applicable” and create new level NONE
+dat_2$POPULATION_shadow <- as.numeric(is.na(dat_2$POPULATION)) # create a shadow variable
+dat_2$POPULATION[is.na(dat_2$POPULATION)] <- 0 #Assign missing to zero to original var
+dat_2$AGE25_PROPTN_shadow <- as.numeric(is.na(dat_2$AGE25_PROPTN)) #create shadow variable
+dat_2$AGE25_PROPTN[is.na(dat_2$AGE25_PROPTN)] <- 0 #Assign missing to zero to original var
+dat_2$AGE50_PROPTN_shadow <- as.numeric(is.na(dat_2$AGE50_PROPTN)) #createshadow variable
+dat_2$AGE50_PROPTN[is.na(dat_2$AGE50_PROPTN)] <- 0 #Assign missing to zero to original var
+dat_2$AGE_MEDIAN_shadow <- as.numeric(is.na(dat_2$AGE_MEDIAN)) #createshadow variable
+dat_2$AGE_MEDIAN[is.na(dat_2$AGE_MEDIAN)] <- 0 #Assign missing to zero to original var
+dat_2$POP_DENSITY_shadow <- as.numeric(is.na(dat_2$POP_DENSITY)) #createshadow variable
+dat_2$POP_DENSITY[is.na(dat_2$POP_DENSITY)] <- 0 #Assign missing to zero to original var
+dat_2$GDP_shadow <- as.numeric(is.na(dat_2$GDP)) # create a shadow variable
+dat_2$GDP[is.na(dat_2$GDP)] <- 0 #Assign missing to zero to original var
+dat_2$INFANT_MORT_shadow <- as.numeric(is.na(dat_2$INFANT_MORT)) #create a shadow variable
+dat_2$INFANT_MORT[is.na(dat_2$INFANT_MORT)] <- 0 #Assign missing to zero to original var
+dat_2$DOCS_shadow <- as.numeric(is.na(dat_2$DOCS)) #create a shadow variable
+dat_2$DOCS[is.na(dat_2$DOCS)] <- 0 #Assign missing to zero to original var
+dat_2$VAX_RATE_shadow <- as.numeric(is.na(dat_2$VAX_RATE)) #create a shadow variable
+dat_2$VAX_RATE[is.na(dat_2$VAX_RATE)] <- 0 #Assign missing to zero to original var
+dat_2$HEALTHCARE_COST_shadow <- as.numeric(is.na(dat_2$HEALTHCARE_COST))
+dat_2$HEALTHCARE_COST[is.na(dat_2$HEALTHCARE_COST)] <- 0 #Assign missing to zero to original var
+dat_2$DEATH_RATE_shadow <- as.numeric(is.na(dat_2$DEATH_RATE))
+dat_2$DEATH_RATE[is.na(dat_2$DEATH_RATE)] <- 0
+
+#infill NAs with 0 for healthcare_cost
+#data_$num[is.na(dat$num)] <- 0
+
+#This calculates the ratio of missingness of a vector.
+#pMiss <- function(x){ sum(is.na(x))/length(x)*100 }
+
+
+#get numeric data for pairs plot 
+num_data = data %>% select_if(is.numeric)
+
+#assign variable types to variables
+allVars = colnames(data)
+factVars = colnames(data)[unlist(lapply(data, is.factor))]
+numVars = colnames(data)[unlist(lapply(data, is.numeric))]
+
+#get col-names to make choice variables
+choices_cat = colnames(as.data.frame(data %>% select(c(2,12))))
+choices_pairs = colnames(as.data.frame(data %>% select(-CODE, -POLITICS, -HEALTHCARE_BASIS, -OBS_TYPE)))
+
+choices_pairs_colour = factVars
+#choices_pairs_colour[['OBS_TYPE']] <- NULL
+
+domChoices <- c("l","f","r","t","i","p")

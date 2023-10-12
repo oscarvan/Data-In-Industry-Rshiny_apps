@@ -1,0 +1,171 @@
+shinyServer(function(input, output, session) {
+ 
+    # Summary output
+    output$SummaryA1 <- renderPrint({
+      str(data)
+    })
+    
+    # Summary output
+    output$SummaryA2 <- renderPrint({
+      summary(as.data.frame(data))
+    })
+    
+    #Mosaic output
+    output$Mosaic <- renderPlot({
+      formula <- as.formula(paste("~",paste(input$Variables_cat, collapse = " + ")))
+      vcd::mosaic(formula, data = data,
+                  main = "Categorical variables",
+                  shade = TRUE, legend = TRUE)
+    })
+    
+    # Pairs output
+    output$pairs <- renderPlot({
+      neededVarsPairs <- c(input$VarsToShowPairs, input$VarToColour)
+      
+      dataPairs <- data[, neededVarsPairs]
+      
+      GGally::ggpairs(data = dataPairs, 
+                      mapping = aes_string(colour=input$VarToColour),
+                      title = "Pairs of the data", 
+                      progress = FALSE)
+    })
+    
+    # Correlation corrgram output
+    output$Corrgram <- renderPlot({
+      neededVarsCorr <- c(input$VarsToShowCorr)
+      dataCorr = data[, neededVarsCorr]
+      corrgram(dataCorr, 
+               order = input$Group, 
+               abs = input$abs, 
+               cor.method = input$CorrMeth,
+               text.panel = panel.txt,
+               main = "Correlation")
+    })
+    
+    # Missingness output
+    output$vis_miss <- renderPlot({
+      neededVarsMiss <- c(input$VarsToShowMiss)
+      dataMiss = data[, neededVarsMiss]
+      
+      vis_miss(dataMiss, cluster = input$cluster, sort_miss = input$sort) +
+        labs(title = paste("Missingess, clustered: ", input$cluster, "sorted: ", input$sort))
+    })
+    
+    # Predicting the missingness
+    output$r_part <- renderPlot({
+      
+      covid = data 
+
+      # covid <- covid[order(covid$CODE),]
+      # MplsStops$idNum <- 1:nrow(MplsStops)
+      # 
+      # # step 2
+      # MplsStops$missingness <- apply(X = is.na(MplsStops), MARGIN = 1, FUN = sum)
+      # 
+      # # step 3
+      # tree <- caret::train(missingness ~ ., 
+      #                      data = MplsStops, 
+      #                      method = "rpart", 
+      #                      na.action = na.rpart) # na.rpart means "rpart will deal with missing predictors intrinsically"
+      # # step 4
+      # rpart.plot(tree$finalModel, 
+      #            main = "Predicting the number of missing variables in an observation",
+    })
+    
+
+    
+    # Miss_upset output 
+    output$gg_miss <- renderPlot({
+      neededVarsGGMiss <- c(input$VarsToShowgGGMiss)
+      dataGGMiss = data[, neededVarsGGMiss]
+      
+      gg_miss_upset(data = dataGGMiss, nsets = input$range_upset)
+    })
+    
+    # Missingness correlation
+    output$miss_correlation <- renderPlot({
+
+        m <- is.na(data) + 0 # this is a trick that transforms Logical to Binary
+        cm <- colMeans(m)
+        m <- m[, cm > 0 & cm < 1, drop = FALSE] #remove none-missing or all-missing variables
+        colnames(m)
+
+        corrgram::corrgram(cor(m), order = "OLO", abs = TRUE)
+        title(main = "Variable missing value correlation")
+
+    })
+    
+    #Boxplot (numeric) output
+    output$Boxplot <- renderPlot({
+        neededVarsBox <- c(input$VarsToShowBox)
+        dataBox = num_data[, neededVarsBox]
+        dataBox <- as.matrix(dataBox)
+        dataBox <- scale(dataBox, center = input$standardise, scale = input$standardise)
+        
+        car::Boxplot(y = dataBox, ylab = NA, use.cols = TRUE, notch = FALSE, varwidth = FALSE,  
+                     horizontal = FALSE, outline = input$outliers, 
+                     col = brewer.pal(n = dim(data)[2], name = "PuBu"),
+                     range = input$range, main = "Boxplots", 
+                     id = ifelse(input$outliers, list(n = Inf, location = "avoid"), 
+                                 data[, dim(data)[2]])) 
+    })
+    
+    #Boxplot ggplott
+    output$BoxplotGG <- renderPlot({
+      
+      neededVarsBox <- c(input$VarsToShowBox)
+      dataBox = num_data[, neededVarsBox]
+      dataBox <- as.matrix(dataBox)
+      dataBox <- scale(dataBox, center = input$standardise, scale = input$standardise)
+      
+      ggbetweenstats(data = data,
+                     
+                     y = dataBox,
+                     outlier.tagging = TRUE,
+                     outlier.label = POLITICS)
+
+    })
+    
+    # Rising value (Gaps) output
+    output$rising_value <- renderPlot({
+      
+      neededVarsRis <- c(input$VarsToShowRis) #only numeric vars available on UI
+      data_Ris = data[, neededVarsRis]
+  
+      for (col in 1:ncol(data_Ris)) {
+        data_Ris[,col] <- data_Ris[order(data_Ris[,col]),col] #sort each column in ascending order
+      }
+      
+      data_Ris <- scale(x = data_Ris, center = input$centre, scale = input$scale)
+      
+      mypalette <- rainbow(ncol(data_Ris))
+      
+      matplot(x = seq(1, 100, length.out = nrow(data_Ris)), y = data_Ris, 
+              type = "l", xlab = "Percentile", ylab = "Values",
+              lty = 1, lwd = 1, col = mypalette, main = "Rising value chart")
+      
+      legend(legend = colnames(data_Ris), x = "bottomright",  
+             lty = 1, lwd = 5, col = mypalette, ncol = round(ncol(data_Ris)^0.3))
+    })
+    
+    # Histogram output
+    output$histogram <- renderPlot({
+      neededVarHist <- c(input$inputVarHist)#only numeric vars available on UI
+      data_Hist = data[, neededVarHist]
+      
+      hist(data_Hist,
+           breaks = as.numeric(input$n_breaks),
+           xlab = input$inputVarHist,
+           main = paste("Histogram of", input$inputVarHist))
+      
+      if (input$individual_obs) {
+        rug(data_Hist)
+      }
+    })
+  
+    # DATA TABLE
+    output$mytable <- DT::renderDataTable({
+      data
+    })
+
+})
